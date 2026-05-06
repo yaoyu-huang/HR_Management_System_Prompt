@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>HR 效率工具</h2>
+    <p class="text-zinc-500 text-sm leading-relaxed">将原独立脚本整合到系统：日程协调、候选人触达、数据洞察报告。均需登录后使用。</p>
+    {% if not llm_configured %}
+    <p class="mt-3 rounded-2xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900">
+        未检测到 <code class="rounded bg-amber-100/80 px-1">DEEPSEEK_API_KEY</code>。触达与高管报告需调用 DeepSeek API；请在 <code class="rounded bg-amber-100/80 px-1">.env</code> 中配置后重启应用。
+    </p>
+    {% endif %}
+</div>
+
+<div class="grid">
+    <div class="card">
+        <h2 class="text-xl">面试日程协调</h2>
+        <p class="text-zinc-500 text-sm">JSON 空闲时段 → 智能筛选 → .ics 下载 + 邀约邮件草稿</p>
+        <a class="mt-4 inline-block rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium hover:shadow-apple" href="{{ url_for('automation_interview') }}">进入</a>
+    </div>
+    <div class="card">
+        <h2 class="text-xl">千人千面触达</h2>
+        <p class="text-zinc-500 text-sm">面评转高情商通知信（Gemini）</p>
+        <a class="mt-4 inline-block rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium hover:shadow-apple" href="{{ url_for('automation_touch') }}">进入</a>
+    </div>
+    <div class="card">
+        <h2 class="text-xl">招聘洞察报告</h2>
+        <p class="text-zinc-500 text-sm">模拟数据聚合 + HR 总监口吻商业报告（Gemini）</p>
+        <a class="mt-4 inline-block rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium hover:shadow-apple" href="{{ url_for('automation_insight') }}">进入</a>
+    </div>
+</div>
+{% endblock %}

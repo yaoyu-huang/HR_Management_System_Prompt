@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>千人千面候选人触达</h2>
+    <p class="text-zinc-500 text-sm">将简短 HR 面评转化为温暖、有建设性的通知邮件（DeepSeek）。需配置 <code class="rounded bg-zinc-100 px-1">DEEPSEEK_API_KEY</code>。</p>
+    <form method="post" class="mt-4 space-y-4">
+        <div class="grid">
+            <div><label>候选人姓名</label><br><input class="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2" type="text" name="name" value="{{ defaults.name }}" required></div>
+            <div><label>应聘岗位</label><br><input class="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2" type="text" name="role" value="{{ defaults.role }}" required></div>
+            <div class="md:col-span-2"><label>招聘结果</label><br>
+                <select class="mt-1 rounded-xl border border-zinc-200 px-3 py-2" name="decision">
+                    <option value="淘汰" {% if defaults.decision == '淘汰' %}selected{% endif %}>淘汰</option>
+                    <option value="通过" {% if defaults.decision == '通过' %}selected{% endif %}>通过</option>
+                    <option value="待定" {% if defaults.decision == '待定' %}selected{% endif %}>待定</option>
+                </select>
+            </div>
+        </div>
+        <div>
+            <label>HR 面评（内部口径，模型会转化表述）</label><br>
+            <textarea name="hr_feedback" rows="4" class="mt-1 w-full rounded-xl border border-zinc-200 bg-white/90 p-3 text-sm" required>{{ defaults.hr_feedback }}</textarea>
+        </div>
+        <button type="submit">生成邮件</button>
+    </form>
+</div>
+
+{% if letter %}
+<div class="card">
+    <h2>生成正文</h2>
+    <pre class="mt-2 max-h-[32rem] overflow-auto whitespace-pre-wrap rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 text-sm leading-relaxed">{{ letter }}</pre>
+</div>
+{% endif %}
+{% endblock %}

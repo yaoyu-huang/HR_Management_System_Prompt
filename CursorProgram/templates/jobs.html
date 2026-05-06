@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>职位发布</h2>
+    <form method="post">
+        <div class="grid">
+            <div><label>职位名称</label><br><input type="text" name="title" required></div>
+            <div><label>部门</label><br><input type="text" name="department" required></div>
+            <div><label>地点</label><br><input type="text" name="location" required></div>
+            <div><label>关键词（逗号分隔）</label><br><input type="text" name="keywords" placeholder="招聘,面试,沟通" required></div>
+            <div><label>HC（编制人数）</label><br><input type="number" name="hc" min="1" value="1" required></div>
+            <div><label>已招人数</label><br><input type="number" name="filled_count" min="0" value="0" required></div>
+            <div><label>状态</label><br>
+                <select name="status">
+                    <option value="Open">招聘中</option>
+                    <option value="Paused">暂停</option>
+                    <option value="Filled">已满编</option>
+                    <option value="Closed">关闭</option>
+                </select>
+            </div>
+        </div>
+        <div class="mt-4">
+            <label>发布渠道（可多选）</label>
+            <div class="channel-grid mt-2">
+                {% for ch in job_publish_channel_options %}
+                <label class="channel-option"><input type="checkbox" name="publish_channels" value="{{ ch }}"> {{ ch }}</label>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="mt-4">
+            <label>职位描述</label><br>
+            <input type="text" name="description" required>
+        </div>
+        <br>
+        <button type="submit">发布职位</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>职位列表</h2>
+    <p class="muted" style="margin-top:0">根据 HC 与已招人数调整招聘状态；修改后点击「保存」即时生效。</p>
+    <div class="toolbar">
+        <form method="get">
+            <input type="text" name="q" placeholder="搜索职位/部门/关键词" value="{{ filters.q }}">
+            <select name="status">
+                <option value="">全部状态</option>
+                <option value="Open" {% if filters.status == 'Open' %}selected{% endif %}>招聘中</option>
+                <option value="Paused" {% if filters.status == 'Paused' %}selected{% endif %}>暂停</option>
+                <option value="Filled" {% if filters.status == 'Filled' %}selected{% endif %}>已满编</option>
+                <option value="Closed" {% if filters.status == 'Closed' %}selected{% endif %}>关闭</option>
+            </select>
+            <select name="sort">
+                <option value="created_desc" {% if filters.sort == 'created_desc' %}selected{% endif %}>最新优先</option>
+                <option value="created_asc" {% if filters.sort == 'created_asc' %}selected{% endif %}>最早优先</option>
+            </select>
+            <select name="page_size">
+                <option value="10" {% if filters.page_size == 10 %}selected{% endif %}>10条/页</option>
+                <option value="20" {% if filters.page_size == 20 %}selected{% endif %}>20条/页</option>
+                <option value="50" {% if filters.page_size == 50 %}selected{% endif %}>50条/页</option>
+            </select>
+            <button type="submit">应用</button>
+        </form>
+    </div>
+    <table class="jobs-table">
+        <thead>
+            <tr>
+                <th>职位</th>
+                <th>部门</th>
+                <th>地点</th>
+                <th>关键词</th>
+                <th>发布渠道</th>
+                <th>发布时间</th>
+                <th>HC / 已招 / 状态</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for j in jobs %}
+            <tr>
+                <td>{{ j.title }}</td>
+                <td>{{ j.department }}</td>
+                <td>{{ j.location }}</td>
+                <td class="cell-clip">{{ j.keywords }}</td>
+                <td class="cell-clip">{% if j.publish_channels %}{{ j.publish_channels|replace(',', '、') }}{% else %}—{% endif %}</td>
+                <td>{{ format_time(j.created_at) }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('job_update_row', job_id=j.id, q=filters.q, status=filters.status, sort=filters.sort, page_size=filters.page_size, page=paging.page) }}" class="job-inline-form">
+                        <label class="sr-only" for="hc-{{ j.id }}">HC</label>
+                        <input id="hc-{{ j.id }}" type="number" name="hc" min="1" value="{{ j.hc }}" title="编制 HC">
+                        <span class="hc-sep">/</span>
+                        <label class="sr-only" for="filled-{{ j.id }}">已招</label>
+                        <input id="filled-{{ j.id }}" type="number" name="filled_count" min="0" value="{{ j.filled_count }}" title="已招人数">
+                        <select name="status" title="招聘状态" aria-label="招聘状态">
+                            <option value="Open" {% if j.status == 'Open' %}selected{% endif %}>招聘中</option>
+                            <option value="Paused" {% if j.status == 'Paused' %}selected{% endif %}>暂停</option>
+                            <option value="Filled" {% if j.status == 'Filled' %}selected{% endif %}>已满编</option>
+                            <option value="Closed" {% if j.status == 'Closed' %}selected{% endif %}>关闭</option>
+                        </select>
+                        <button type="submit">保存</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7">暂无职位</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="pager">
+        {% if paging.page > 1 %}
+        <a href="{{ url_for('jobs_page', q=filters.q, status=filters.status, sort=filters.sort, page_size=filters.page_size, page=paging.page-1) }}">上一页</a>
+        {% endif %}
+        <span>第 {{ paging.page }} / {{ paging.page_count }} 页，共 {{ paging.total }} 条</span>
+        {% if paging.page < paging.page_count %}
+        <a href="{{ url_for('jobs_page', q=filters.q, status=filters.status, sort=filters.sort, page_size=filters.page_size, page=paging.page+1) }}">下一页</a>
+        {% endif %}
+    </div>
+</div>
+<style>
+.channel-grid { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; }
+.channel-option { font-size: 0.9rem; cursor: pointer; }
+.jobs-table .cell-clip { max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-inline-form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; margin: 0; }
+.job-inline-form input[type="number"] { width: 3.25rem; padding: 0.2rem 0.35rem; font-size: 0.85rem; }
+.job-inline-form select { font-size: 0.85rem; padding: 0.25rem 0.35rem; max-width: 5.5rem; }
+.job-inline-form button { font-size: 0.8rem; padding: 0.25rem 0.5rem; white-space: nowrap; }
+.hc-sep { color: var(--muted, #666); font-size: 0.85rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+</style>
+{% endblock %}
