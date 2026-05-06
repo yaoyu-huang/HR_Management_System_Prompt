@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>候选人状态通知自动化</h2>
+    <form method="post">
+        <div class="grid">
+            <div>
+                <label>候选人</label><br>
+                <select name="candidate_id" required>
+                    {% for c in candidates %}
+                    <option value="{{ c.id }}">{{ c.name }} — {{ c.job_title or c.role }}（{{ status_text(c.status) }}）</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>目标状态</label><br>
+                <select name="new_status" required>
+                    {% for s in valid_statuses %}
+                    <option value="{{ s }}">{{ status_labels[s] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <br>
+        <button type="submit">更新状态并发送通知</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>导入候选人</h2>
+    {% if not nav_jobs_list %}
+    <p class="muted">请先在「职位发布」创建至少一个职位后再导入候选人。</p>
+    {% endif %}
+    <div style="margin-bottom: 10px;">
+        <a class="link-btn" href="{{ url_for('import_template') }}">下载导入模板</a>
+        <a class="link-btn" href="{{ url_for('import_error_report') }}">下载错误明细报告</a>
+    </div>
+    {% if nav_jobs_list %}
+    <form method="post" action="{{ url_for('import_candidates') }}" enctype="multipart/form-data">
+        <div class="grid">
+            <div>
+                <label>候选人归属职位</label><br>
+                <select name="import_job_id" required>
+                    {% for j in nav_jobs_list %}
+                    <option value="{{ j.id }}" {% if context_job_id == j.id %}selected{% elif not context_job_id and loop.first %}selected{% endif %}>{{ j.title }} · {{ j.department }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>CSV 文件</label><br>
+                <input type="file" name="csv_file" accept=".csv" required>
+            </div>
+            <div class="muted">
+                列头：<code>name,email,role,status</code>（status 可选）。同一职位下邮箱不可重复。
+            </div>
+        </div>
+        <br>
+        <button type="submit">上传并导入</button>
+    </form>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>候选人列表</h2>
+    <div class="toolbar">
+        <form method="get">
+            <input type="text" name="q" placeholder="搜索姓名/邮箱/岗位" value="{{ filters.q }}">
+            <select name="status">
+                <option value="">全部状态</option>
+                {% for s in valid_statuses %}
+                <option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ status_labels[s] }}</option>
+                {% endfor %}
+            </select>
+            <select name="sort">
+                <option value="created_desc" {% if filters.sort == 'created_desc' %}selected{% endif %}>最新优先</option>
+                <option value="created_asc" {% if filters.sort == 'created_asc' %}selected{% endif %}>最早优先</option>
+                <option value="name_asc" {% if filters.sort == 'name_asc' %}selected{% endif %}>姓名 A-Z</option>
+                <option value="name_desc" {% if filters.sort == 'name_desc' %}selected{% endif %}>姓名 Z-A</option>
+            </select>
+            <select name="page_size">
+                <option value="10" {% if filters.page_size == 10 %}selected{% endif %}>10条/页</option>
+                <option value="20" {% if filters.page_size == 20 %}selected{% endif %}>20条/页</option>
+                <option value="50" {% if filters.page_size == 50 %}selected{% endif %}>50条/页</option>
+            </select>
+            <button type="submit">应用</button>
+        </form>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>姓名</th>
+                <th>邮箱</th>
+                <th>系统职位与应聘说明</th>
+                <th>当前状态</th>
+                <th>录入时间</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in candidates %}
+            <tr>
+                <td>{{ c.name }}</td>
+                <td>{{ c.email }}</td>
+                <td class="cand-bind-cell">
+                    {% if nav_jobs_list %}
+                    <form method="post" class="cand-bind-form" action="{{ url_for('candidate_update_job_role', candidate_id=c.id, q=filters.q, status=filters.status, sort=filters.sort, page_size=filters.page_size, page=paging.page, nq=notif_filters.nq, ntype=notif_filters.ntype, nsort=notif_filters.nsort, npage=notif_paging.page, npage_size=notif_filters.npage_size) }}">
+                        <label class="cand-bind-label">系统职位</label>
+                        <select name="job_id" class="cand-bind-select" required title="系统职位">
+                            {% set job_ids = nav_jobs_list|map(attribute='id')|list %}
+                            {% if not c.job_id %}
+                            <option value="" disabled selected>请选择</option>
+                            {% elif c.job_id not in job_ids %}
+                            <option value="{{ c.job_id }}" selected>当前绑定 #{{ c.job_id }}（请改选有效职位）</option>
+                            {% endif %}
+                            {% for j in nav_jobs_list %}
+                            <option value="{{ j.id }}" {% if c.job_id == j.id %}selected{% endif %}>{{ j.title }} · {{ j.department }}</option>
+                            {% endfor %}
+                        </select>
+                        <label class="cand-bind-label">应聘说明</label>
+                        <input type="text" name="role" class="cand-bind-role" value="{{ c.role }}" placeholder="如：校招-Java、社招5年" required title="应聘说明">
+                        <button type="submit" class="cand-bind-save">保存</button>
+                    </form>
+                    {% else %}
+                    <div class="muted text-sm">暂无职位数据，请先到「职位发布」创建职位后再绑定。</div>
+                    <div>{{ c.job_title or '—' }}</div>
+                    <div>{{ c.role }}</div>
+                    {% endif %}
+                </td>
+                <td><span class="label-chip">{{ status_text(c.status) }}</span></td>
+                <td>{{ format_time(c.created_at) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5">暂无候选人</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="pager">
+        {% if paging.page > 1 %}
+        <a href="{{ url_for('candidates_page', q=filters.q, status=filters.status, sort=filters.sort, page_size=filters.page_size, page=paging.page-1, nq=notif_filters.nq, ntype=notif_filters.ntype, nsort=notif_filters.nsort, npage=notif_paging.page, npage_size=notif_filters.npage_size) }}">上一页</a>
+        {% endif %}
+        <span>第 {{ paging.page }} / {{ paging.page_count }} 页，共 {{ paging.total }} 条</span>
+        {% if paging.page < paging.page_count %}
+        <a href="{{ url_for('candidates_page', q=filters.q, status=filters.status, sort=filters.sort, page_size=filters.page_size, page=paging.page+1, nq=notif_filters.nq, ntype=notif_filters.ntype, nsort=notif_filters.nsort, npage=notif_paging.page, npage_size=notif_filters.npage_size) }}">下一页</a>
+        {% endif %}
+    </div>
+</div>
+<style>
+.cand-bind-cell { vertical-align: top; min-width: 14rem; }
+.cand-bind-form { display: flex; flex-direction: column; align-items: stretch; gap: 0.35rem; max-width: 22rem; margin: 0; }
+.cand-bind-label { font-size: 0.72rem; font-weight: 600; color: #6b7280; margin: 0; }
+.cand-bind-select, .cand-bind-role { font-size: 0.88rem; padding: 0.45rem 0.55rem; }
+.cand-bind-save { align-self: flex-start; font-size: 0.8rem; padding: 0.35rem 0.75rem; margin-top: 0.15rem; }
+</style>
+
+<div class="card">
+    <h2>通知日志</h2>
+    <div class="toolbar">
+        <form method="get">
+            <input type="hidden" name="q" value="{{ filters.q }}">
+            <input type="hidden" name="status" value="{{ filters.status }}">
+            <input type="hidden" name="sort" value="{{ filters.sort }}">
+            <input type="hidden" name="page_size" value="{{ filters.page_size }}">
+            <input type="hidden" name="page" value="{{ paging.page }}">
+            <input type="text" name="nq" placeholder="搜索邮箱/主题/候选人" value="{{ notif_filters.nq }}">
+            <input type="text" name="ntype" placeholder="通知类型" value="{{ notif_filters.ntype }}">
+            <select name="nsort">
+                <option value="created_desc" {% if notif_filters.nsort == 'created_desc' %}selected{% endif %}>最新优先</option>
+                <option value="created_asc" {% if notif_filters.nsort == 'created_asc' %}selected{% endif %}>最早优先</option>
+            </select>
+            <select name="npage_size">
+                <option value="10" {% if notif_filters.npage_size == 10 %}selected{% endif %}>10条/页</option>
+                <option value="20" {% if notif_filters.npage_size == 20 %}selected{% endif %}>20条/页</option>
+                <option value="50" {% if notif_filters.npage_size == 50 %}selected{% endif %}>50条/页</option>
+            </select>
+            <button type="submit">应用</button>
+        </form>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>类型</th>
+                <th>接收对象</th>
+                <th>候选人</th>
+                <th>主题</th>
+                <th>发送时间</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for n in notifications %}
+            <tr>
+                <td><span class="label-chip">{{ n.type }}</span></td>
+                <td>{{ n.target_email }}</td>
+                <td>{{ n.candidate_name or '-' }}</td>
+                <td>{{ n.subject }}</td>
+                <td>{{ format_time(n.sent_at) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5">暂无通知记录</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="pager">
+        {% if notif_paging.page > 1 %}
+        <a href="{{ url_for('candidates_page', q=filters.q, status=filters.status, sort=filters.sort, page_size=filters.page_size, page=paging.page, nq=notif_filters.nq, ntype=notif_filters.ntype, nsort=notif_filters.nsort, npage=notif_paging.page-1, npage_size=notif_filters.npage_size) }}">上一页</a>
+        {% endif %}
+        <span>第 {{ notif_paging.page }} / {{ notif_paging.page_count }} 页，共 {{ notif_paging.total }} 条</span>
+        {% if notif_paging.page < notif_paging.page_count %}
+        <a href="{{ url_for('candidates_page', q=filters.q, status=filters.status, sort=filters.sort, page_size=filters.page_size, page=paging.page, nq=notif_filters.nq, ntype=notif_filters.ntype, nsort=notif_filters.nsort, npage=notif_paging.page+1, npage_size=notif_filters.npage_size) }}">下一页</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>系统总览</h2>
+    {% if context_job_id %}
+    <p class="muted mb-4">以下指标与下方列表已按顶部所选岗位过滤。</p>
+    {% else %}
+    <p class="muted mb-4">未选择具体岗位时，指标统计当前列表范围内的全部候选人；选择岗位后仅看该岗。</p>
+    {% endif %}
+    <div class="grid">
+        <div class="metric">
+            <h3>{{ candidates|length }}</h3>
+            <div class="muted">候选人总数</div>
+        </div>
+        <div class="metric">
+            <h3>{{ interviews|length }}</h3>
+            <div class="muted">面试记录（本页展示）</div>
+        </div>
+        <div class="metric">
+            <h3>{{ notifications|length }}</h3>
+            <div class="muted">近期通知（本页展示）</div>
+        </div>
+        <div class="metric">
+            <h3>{{ jobs|length }}</h3>
+            <div class="muted">职位数（全库）</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>岗位招聘状态</h2>
+    <p class="muted mb-4">各职位 HC、在招状态及候选人在各阶段的分布（与顶部「先选岗位」筛选独立，便于总览）。</p>
+    <div class="overflow-x-auto">
+        <table>
+            <thead>
+                <tr>
+                    <th>职位</th>
+                    <th>部门</th>
+                    <th>职位状态</th>
+                    <th>HC</th>
+                    <th>在池人数</th>
+                    <th>阶段分布</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in job_pipelines %}
+                {% set j = row.job %}
+                <tr class="{% if context_job_id and j.id == context_job_id %}bg-blue-50/60{% endif %}">
+                    <td><strong>{{ j.title }}</strong></td>
+                    <td>{{ j.department }}</td>
+                    <td><span class="label-chip">{{ job_status_labels.get(j.status, j.status) }}</span></td>
+                    <td>已招 {{ j.filled_count }} / 计划 {{ j.hc }}</td>
+                    <td>{{ row.candidate_total }}</td>
+                    <td class="text-sm leading-relaxed">
+                        {% for st in ['Applied','Interview Scheduled','Interviewed','Offer','Hired','Rejected'] %}
+                            {% if row.status_counts[st] %}
+                                <span class="label-chip">{{ status_labels[st] }} {{ row.status_counts[st] }}</span>
+                            {% endif %}
+                        {% endfor %}
+                        {% if not row.candidate_total %}<span class="muted">暂无归属候选人</span>{% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6">暂无职位数据</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>近期面试安排</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>候选人</th>
+                <th>面试官</th>
+                <th>时间</th>
+                <th>方式</th>
+                <th>地点/会议链接</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for i in interviews[:8] %}
+            <tr>
+                <td>{{ i.candidate_name }}</td>
+                <td>{{ i.interviewer_name }}</td>
+                <td>{{ format_time(i.interview_at) }}</td>
+                <td>{{ "线上" if i.mode == "Online" else "线下" }}</td>
+                <td>{{ i.location_or_link }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5">暂无面试记录</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>近期通知记录</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>通知类型</th>
+                <th>接收对象</th>
+                <th>候选人</th>
+                <th>发送时间</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for n in notifications %}
+            <tr>
+                <td><span class="label-chip">{{ n.type }}</span></td>
+                <td>{{ n.target_email }}</td>
+                <td>{{ n.candidate_name or '-' }}</td>
+                <td>{{ format_time(n.sent_at) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4">暂无通知记录</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>简历筛选</h2>
+    <form method="post">
+        <div class="grid">
+            <div><label>候选人姓名</label><br><input type="text" name="candidate_name" required></div>
+            <div><label>候选人邮箱</label><br><input type="email" name="candidate_email" required></div>
+            <div>
+                <label>应聘职位</label><br>
+                <select name="job_id" required>
+                    {% for j in jobs %}
+                    <option value="{{ j.id }}" {% if preselect_job_id and preselect_job_id == j.id %}selected{% endif %}>{{ j.title }} - {{ j.department }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="mt-4">
+            <label>简历文本</label><br>
+            <textarea name="resume_text" rows="6" required></textarea>
+        </div>
+        <br>
+        <button type="submit">执行自动筛选</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>筛选记录</h2>
+    <div class="toolbar">
+        <form method="get">
+            <input type="text" name="q" placeholder="搜索候选人/邮箱/职位" value="{{ filters.q }}">
+            <select name="result">
+                <option value="">全部结果</option>
+                <option value="通过初筛" {% if filters.result == '通过初筛' %}selected{% endif %}>通过初筛</option>
+                <option value="待人工复核" {% if filters.result == '待人工复核' %}selected{% endif %}>待人工复核</option>
+            </select>
+            <select name="sort">
+                <option value="created_desc" {% if filters.sort == 'created_desc' %}selected{% endif %}>最新优先</option>
+                <option value="created_asc" {% if filters.sort == 'created_asc' %}selected{% endif %}>最早优先</option>
+            </select>
+            <select name="page_size">
+                <option value="10" {% if filters.page_size == 10 %}selected{% endif %}>10条/页</option>
+                <option value="20" {% if filters.page_size == 20 %}selected{% endif %}>20条/页</option>
+                <option value="50" {% if filters.page_size == 50 %}selected{% endif %}>50条/页</option>
+            </select>
+            <button type="submit">应用</button>
+        </form>
+    </div>
+    <table>
+        <thead>
+            <tr><th>候选人</th><th>邮箱</th><th>职位</th><th>评分</th><th>结果</th><th>匹配关键词</th><th>时间</th></tr>
+        </thead>
+        <tbody>
+            {% for r in screenings %}
+            <tr>
+                <td>{{ r.candidate_name }}</td>
+                <td>{{ r.candidate_email }}</td>
+                <td>{{ r.job_title }}</td>
+                <td>{{ r.score }}</td>
+                <td><span class="label-chip">{{ r.result }}</span></td>
+                <td>{{ r.matched_keywords or "-" }}</td>
+                <td>{{ format_time(r.created_at) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7">暂无筛选记录</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="pager">
+        {% if paging.page > 1 %}
+        <a href="{{ url_for('screening_page', q=filters.q, result=filters.result, sort=filters.sort, page_size=filters.page_size, page=paging.page-1) }}">上一页</a>
+        {% endif %}
+        <span>第 {{ paging.page }} / {{ paging.page_count }} 页，共 {{ paging.total }} 条</span>
+        {% if paging.page < paging.page_count %}
+        <a href="{{ url_for('screening_page', q=filters.q, result=filters.result, sort=filters.sort, page_size=filters.page_size, page=paging.page+1) }}">下一页</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>面试安排自动化</h2>
+    <form method="post">
+        <div class="grid">
+            <div>
+                <label>候选人</label><br>
+                <select name="candidate_id" required>
+                    {% for c in candidates %}
+                    <option value="{{ c.id }}">{{ c.name }} — {{ c.job_title or c.role }}（{{ status_text(c.status) }}）</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>面试官</label><br>
+                <select name="interviewer_id" required>
+                    {% for i in interviewers %}
+                    <option value="{{ i.id }}">{{ i.name }} ({{ i.email }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>面试时间</label><br>
+                <input type="datetime-local" name="interview_at" step="1" required>
+            </div>
+            <div>
+                <label>面试方式</label><br>
+                <select name="mode" required>
+                    <option value="Online">线上</option>
+                    <option value="Offline">线下</option>
+                </select>
+            </div>
+            <div>
+                <label>地点或会议链接</label><br>
+                <input type="text" name="location_or_link" placeholder="例如：A 会议室 / 腾讯会议链接" required>
+            </div>
+        </div>
+        <br>
+        <button type="submit">一键安排面试并通知</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>面试记录</h2>
+    <div class="toolbar">
+        <form method="get">
+            <input type="text" name="q" placeholder="搜索候选人/面试官/地点" value="{{ filters.q }}">
+            <select name="mode">
+                <option value="">全部方式</option>
+                <option value="Online" {% if filters.mode == 'Online' %}selected{% endif %}>线上</option>
+                <option value="Offline" {% if filters.mode == 'Offline' %}selected{% endif %}>线下</option>
+            </select>
+            <select name="sort">
+                <option value="created_desc" {% if filters.sort == 'created_desc' %}selected{% endif %}>最新优先</option>
+                <option value="created_asc" {% if filters.sort == 'created_asc' %}selected{% endif %}>最早优先</option>
+            </select>
+            <select name="page_size">
+                <option value="10" {% if filters.page_size == 10 %}selected{% endif %}>10条/页</option>
+                <option value="20" {% if filters.page_size == 20 %}selected{% endif %}>20条/页</option>
+                <option value="50" {% if filters.page_size == 50 %}selected{% endif %}>50条/页</option>
+            </select>
+            <button type="submit">应用</button>
+        </form>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>候选人</th>
+                <th>面试官</th>
+                <th>时间</th>
+                <th>方式</th>
+                <th>地点/会议链接</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for i in interviews %}
+            <tr>
+                <td>{{ i.candidate_name }}</td>
+                <td>{{ i.interviewer_name }}</td>
+                <td>{{ format_time(i.interview_at) }}</td>
+                <td>{{ "线上" if i.mode == "Online" else "线下" }}</td>
+                <td>{{ i.location_or_link }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5">暂无面试记录</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="pager">
+        {% if paging.page > 1 %}
+        <a href="{{ url_for('scheduler', q=filters.q, mode=filters.mode, sort=filters.sort, page_size=filters.page_size, page=paging.page-1) }}">上一页</a>
+        {% endif %}
+        <span>第 {{ paging.page }} / {{ paging.page_count }} 页，共 {{ paging.total }} 条</span>
+        {% if paging.page < paging.page_count %}
+        <a href="{{ url_for('scheduler', q=filters.q, mode=filters.mode, sort=filters.sort, page_size=filters.page_size, page=paging.page+1) }}">下一页</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

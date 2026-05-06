@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HR 管理系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        appleblue: "#0071E3"
+                    },
+                    boxShadow: {
+                        apple: "0 10px 35px rgba(0,0,0,0.04)",
+                        "apple-hover": "0 18px 42px rgba(0,0,0,0.06)"
+                    },
+                    fontFamily: {
+                        sans: ["Inter", "SF Pro Text", "SF Pro Display", "-apple-system", "BlinkMacSystemFont", "PingFang SC", "Segoe UI", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root { --bg: #f3f4f6; --text-main: #1d1d1f; --text-muted: #6e6e73; }
+
+        .card {
+            background: rgba(255, 255, 255, 0.78);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border-radius: 1.5rem;
+            padding: 2rem;
+            box-shadow: 0 10px 34px rgba(0, 0, 0, 0.04);
+            transition: all 500ms ease-out;
+        }
+
+        .card:hover {
+            transform: scale(1.02);
+            box-shadow: 0 18px 42px rgba(0, 0, 0, 0.06);
+        }
+
+        .card h2 {
+            font-size: 1.75rem;
+            line-height: 1.2;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 1.25rem;
+            color: #1d1d1f;
+        }
+
+        .grid {
+            display: grid;
+            gap: 1.5rem;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        }
+
+        .metric {
+            border: 1px solid rgba(255, 255, 255, 0.55);
+            border-radius: 1.25rem;
+            padding: 1.5rem;
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            transition: all 500ms ease-out;
+        }
+
+        .metric:hover { transform: scale(1.02); box-shadow: 0 14px 36px rgba(0, 0, 0, 0.05); }
+
+        .metric h3 {
+            font-size: 2.35rem;
+            line-height: 1.1;
+            font-weight: 900;
+            letter-spacing: -0.02em;
+            margin: 0 0 0.5rem;
+        }
+
+        .muted {
+            color: #6e6e73;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            font-weight: 400;
+        }
+
+        .toolbar {
+            margin-bottom: 1.25rem;
+        }
+
+        .toolbar form {
+            display: grid;
+            gap: 1rem;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        }
+
+        .toolbar button {
+            justify-self: start;
+        }
+
+        .pager {
+            margin-top: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .pager a {
+            text-decoration: none;
+            color: #1d1d1f;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 999px;
+            padding: 0.45rem 0.85rem;
+            transition: all 500ms ease-out;
+            background: rgba(255, 255, 255, 0.72);
+        }
+
+        .pager a:hover {
+            transform: scale(1.02);
+            background: rgba(255, 255, 255, 0.92);
+        }
+
+        .pager span {
+            color: #6e6e73;
+            font-size: 0.92rem;
+        }
+
+        .label-chip {
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 999px;
+            padding: 0.2rem 0.65rem;
+            font-size: 0.78rem;
+            color: #4b5563;
+            background: rgba(255, 255, 255, 0.7);
+            transition: all 500ms ease-out;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            font-size: 0.82rem;
+            color: #6e6e73;
+            font-weight: 600;
+            border-bottom: 1px solid #ececec;
+            padding: 0.85rem 0.5rem;
+            letter-spacing: 0.02em;
+        }
+
+        td {
+            border-bottom: 1px solid #f3f4f6;
+            padding: 0.9rem 0.5rem;
+            color: #1f2937;
+            font-size: 0.95rem;
+            transition: all 500ms ease-out;
+        }
+
+        tbody tr:hover td { background: rgba(255, 255, 255, 0.55); }
+
+        input[type="text"], input[type="email"], input[type="password"], input[type="file"], input[type="month"], input[type="datetime-local"], select, textarea {
+            width: 100%;
+            border: 1px solid rgba(0, 0, 0, 0.12);
+            border-radius: 1rem;
+            padding: 0.75rem 0.9rem;
+            color: #1f2937;
+            background: rgba(255, 255, 255, 0.82);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            transition: all 500ms ease-out;
+        }
+
+        input[type="text"]:focus, input[type="email"]:focus, input[type="password"]:focus, input[type="file"]:focus, input[type="month"]:focus, input[type="datetime-local"]:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #0071e3;
+            box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
+        }
+
+        button {
+            background: #0071e3;
+            color: #ffffff;
+            border-radius: 999px;
+            border: none;
+            padding: 0.62rem 1.15rem;
+            font-weight: 600;
+            transition: all 500ms ease-out;
+        }
+
+        button:hover {
+            background: #0065cb;
+            transform: scale(1.02);
+            box-shadow: 0 10px 28px rgba(0, 113, 227, 0.22);
+        }
+
+        label {
+            display: inline-block;
+            margin-bottom: 0.45rem;
+            color: #374151;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+    </style>
+</head>
+<body class="min-h-screen bg-zinc-100 text-zinc-900 antialiased">
+    <div id="app-shell" class="mx-auto max-w-7xl px-6 py-10 md:px-12 lg:px-16">
+        <header class="mb-8 rounded-3xl border border-white/30 bg-white/75 px-8 py-10 shadow-apple backdrop-blur-2xl transition-all duration-500 ease-out">
+            <h1 class="text-4xl font-bold tracking-tight leading-tight md:text-5xl lg:text-6xl">HR 管理系统</h1>
+            <p class="mt-4 text-base font-normal leading-relaxed text-zinc-500 md:text-lg">面试安排自动化 · 候选人状态通知 · 月度报表自动生成</p>
+        </header>
+        {% if session.get('admin_logged_in') and nav_jobs_list is defined %}
+        <div class="mb-6 rounded-3xl border border-blue-100/80 bg-gradient-to-r from-white/90 to-blue-50/50 px-6 py-4 shadow-apple backdrop-blur-xl">
+            <form method="post" action="{{ url_for('set_context_job') }}" class="flex flex-wrap items-end gap-3 md:items-center">
+                <input type="hidden" name="next" value="{{ request.full_path }}">
+                <div class="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+                    <span class="shrink-0 text-sm font-semibold text-zinc-800">先选岗位</span>
+                    <select name="job_id" class="!w-full min-w-[12rem] max-w-xl sm:!w-auto sm:min-w-[18rem]">
+                        <option value="all" {% if not context_job_id %}selected{% endif %}>全部岗位（不过滤列表）</option>
+                        {% for j in nav_jobs_list %}
+                        <option value="{{ j.id }}" {% if context_job_id == j.id %}selected{% endif %}>{{ j.title }} · {{ j.department }}（{{ job_status_labels.get(j.status, j.status) }}）</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="shrink-0">应用</button>
+                {% if context_job %}
+                <span class="text-sm text-zinc-600">本岗 HC：<strong>{{ context_job.filled_count }}</strong> / {{ context_job.hc }} 已招</span>
+                {% endif %}
+            </form>
+        </div>
+        {% endif %}
+        {% if session.get('admin_logged_in') %}
+            <nav class="mb-8 rounded-3xl border border-white/30 bg-white/75 p-4 shadow-apple backdrop-blur-xl transition-all duration-500 ease-out">
+                <div class="flex flex-wrap gap-2 items-center">
+                    <a class="rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('index') }}">总览看板</a>
+                    <a class="rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('scheduler') }}">面试安排</a>
+                    <a class="rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('candidates_page') }}">候选人管理</a>
+                    <a class="rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('screening_page') }}">简历筛选</a>
+                    <a class="rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('jobs_page') }}">职位发布</a>
+                    <a class="rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('report_page') }}">月度报表</a>
+                    <a class="rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('automation_hub') }}">HR 效率工具</a>
+                    <div class="ml-auto flex items-center gap-2 text-sm text-zinc-500">
+                        <span>管理员：{{ session.get("admin_username", "admin") }}</span>
+                        <a class="rounded-full border border-black/10 bg-white/65 px-3 py-2 transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('change_password') }}">修改密码</a>
+                        <a class="rounded-full border border-black/10 bg-white/65 px-3 py-2 transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('logout') }}">退出登录</a>
+                    </div>
+                </div>
+            </nav>
+        {% endif %}
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="{% if category == 'success' %}border-green-200 bg-green-50/85 text-green-700{% else %}border-red-200 bg-red-50/85 text-red-700{% endif %} mb-3 rounded-2xl border px-4 py-3 text-sm backdrop-blur-xl transition-all duration-500 ease-out">
+                  {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <main class="space-y-6">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    <script>
+        Vue.createApp({}).mount("#app-shell");
+    </script>
+</body>
+</html>
