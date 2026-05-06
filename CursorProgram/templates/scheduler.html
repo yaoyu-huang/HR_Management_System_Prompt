@@ -8,7 +8,7 @@
                 <label>候选人</label><br>
                 <select name="candidate_id" required>
                     {% for c in candidates %}
-                    <option value="{{ c.id }}">{{ c.name }} - {{ c.role }}（{{ status_text(c.status) }}）</option>
+                    <option value="{{ c.id }}">{{ c.name }} — {{ c.job_title or c.role }}（{{ status_text(c.status) }}）</option>
                     {% endfor %}
                 </select>
             </div>

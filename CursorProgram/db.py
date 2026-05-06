@@ -10,6 +10,39 @@ def get_conn():
     return conn
 
 
+def ensure_candidates_job_id(conn):
+    """为 candidates 表增加 job_id，并回填历史数据。"""
+    cur = conn.cursor()
+    rows = cur.execute("PRAGMA table_info(candidates)").fetchall()
+    names = {r[1] for r in rows}
+    if "job_id" not in names:
+        cur.execute("ALTER TABLE candidates ADD COLUMN job_id INTEGER REFERENCES jobs(id)")
+        conn.commit()
+
+    pending = cur.execute("SELECT COUNT(*) AS c FROM candidates WHERE job_id IS NULL").fetchone()["c"]
+    if pending == 0:
+        return
+
+    job_rows = cur.execute("SELECT id, title FROM jobs ORDER BY id").fetchall()
+    if not job_rows:
+        conn.commit()
+        return
+
+    cand_rows = cur.execute("SELECT id, role FROM candidates WHERE job_id IS NULL").fetchall()
+    for i, row in enumerate(cand_rows):
+        jid = None
+        role = row["role"] or ""
+        for j in job_rows:
+            title = j["title"] or ""
+            if title and (title in role or role in title):
+                jid = j["id"]
+                break
+        if jid is None:
+            jid = job_rows[i % len(job_rows)]["id"]
+        cur.execute("UPDATE candidates SET job_id = ? WHERE id = ?", (jid, row["id"]))
+    conn.commit()
+
+
 def ensure_jobs_schema(conn):
     """为已存在的 jobs 表补齐发布渠道、HC 等字段（SQLite 无 IF NOT EXISTS 列语法）。"""
     cur = conn.cursor()
@@ -30,23 +63,43 @@ def init_db():
 
     cur.execute(
         """
-        CREATE TABLE IF NOT EXISTS candidates (
+        CREATE TABLE IF NOT EXISTS interviewers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            role TEXT NOT NULL,
-            status TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            email TEXT NOT NULL
         )
         """
     )
 
     cur.execute(
         """
-        CREATE TABLE IF NOT EXISTS interviewers (
+        CREATE TABLE IF NOT EXISTS jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            department TEXT NOT NULL,
+            location TEXT NOT NULL,
+            keywords TEXT NOT NULL,
+            description TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            publish_channels TEXT NOT NULL DEFAULT '',
+            hc INTEGER NOT NULL DEFAULT 1,
+            filled_count INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS candidates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            email TEXT NOT NULL
+            email TEXT NOT NULL,
+            role TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            job_id INTEGER,
+            FOREIGN KEY(job_id) REFERENCES jobs(id)
         )
         """
     )
@@ -84,24 +137,6 @@ def init_db():
 
     cur.execute(
         """
-        CREATE TABLE IF NOT EXISTS jobs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            department TEXT NOT NULL,
-            location TEXT NOT NULL,
-            keywords TEXT NOT NULL,
-            description TEXT NOT NULL,
-            status TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            publish_channels TEXT NOT NULL DEFAULT '',
-            hc INTEGER NOT NULL DEFAULT 1,
-            filled_count INTEGER NOT NULL DEFAULT 0
-        )
-        """
-    )
-
-    cur.execute(
-        """
         CREATE TABLE IF NOT EXISTS resume_screenings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             candidate_name TEXT NOT NULL,
@@ -132,6 +167,7 @@ def init_db():
 
     conn.commit()
     ensure_jobs_schema(conn)
+    ensure_candidates_job_id(conn)
     normalize_existing_timestamps(conn)
     seed_data_if_empty(conn)
     seed_admin_if_empty(conn)
@@ -179,18 +215,6 @@ def seed_data_if_empty(conn):
         return
 
     now = datetime.now()
-    sample_candidates = [
-        ("Alice Chen", "alice@example.com", "Data Analyst", "Applied", format_dt(now - timedelta(days=21))),
-        ("Bob Li", "bob@example.com", "HR Specialist", "Interview Scheduled", format_dt(now - timedelta(days=15))),
-        ("Cindy Wang", "cindy@example.com", "Recruiter", "Interviewed", format_dt(now - timedelta(days=10))),
-        ("David Zhou", "david@example.com", "People Ops", "Offer", format_dt(now - timedelta(days=7))),
-        ("Eva Xu", "eva@example.com", "HRBP", "Hired", format_dt(now - timedelta(days=3))),
-    ]
-    cur.executemany(
-        "INSERT INTO candidates (name, email, role, status, created_at) VALUES (?, ?, ?, ?, ?)",
-        sample_candidates,
-    )
-
     sample_interviewers = [
         ("Iris Manager", "iris.manager@example.com"),
         ("Ken Lead", "ken.lead@example.com"),
@@ -236,6 +260,23 @@ def seed_data_if_empty(conn):
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         sample_jobs,
+    )
+
+    job1 = cur.execute("SELECT id FROM jobs WHERE title = ?", ("招聘专员",)).fetchone()["id"]
+    job2 = cur.execute("SELECT id FROM jobs WHERE title = ?", ("HRBP",)).fetchone()["id"]
+    sample_candidates = [
+        ("Alice Chen", "alice@example.com", "招聘专员（数据分析向）", "Applied", format_dt(now - timedelta(days=21)), job1),
+        ("Bob Li", "bob@example.com", "招聘专员", "Interview Scheduled", format_dt(now - timedelta(days=15)), job1),
+        ("Cindy Wang", "cindy@example.com", "招聘专员", "Interviewed", format_dt(now - timedelta(days=10)), job1),
+        ("David Zhou", "david@example.com", "HRBP", "Offer", format_dt(now - timedelta(days=7)), job2),
+        ("Eva Xu", "eva@example.com", "HRBP", "Hired", format_dt(now - timedelta(days=3)), job2),
+    ]
+    cur.executemany(
+        """
+        INSERT INTO candidates (name, email, role, status, created_at, job_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        sample_candidates,
     )
 
     conn.commit()

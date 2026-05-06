@@ -214,12 +214,33 @@
             <h1 class="text-4xl font-bold tracking-tight leading-tight md:text-5xl lg:text-6xl">HR 管理系统</h1>
             <p class="mt-4 text-base font-normal leading-relaxed text-zinc-500 md:text-lg">面试安排自动化 · 候选人状态通知 · 月度报表自动生成</p>
         </header>
+        {% if session.get('admin_logged_in') and nav_jobs_list is defined %}
+        <div class="mb-6 rounded-3xl border border-blue-100/80 bg-gradient-to-r from-white/90 to-blue-50/50 px-6 py-4 shadow-apple backdrop-blur-xl">
+            <form method="post" action="{{ url_for('set_context_job') }}" class="flex flex-wrap items-end gap-3 md:items-center">
+                <input type="hidden" name="next" value="{{ request.full_path }}">
+                <div class="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+                    <span class="shrink-0 text-sm font-semibold text-zinc-800">先选岗位</span>
+                    <select name="job_id" class="!w-full min-w-[12rem] max-w-xl sm:!w-auto sm:min-w-[18rem]">
+                        <option value="all" {% if not context_job_id %}selected{% endif %}>全部岗位（不过滤列表）</option>
+                        {% for j in nav_jobs_list %}
+                        <option value="{{ j.id }}" {% if context_job_id == j.id %}selected{% endif %}>{{ j.title }} · {{ j.department }}（{{ job_status_labels.get(j.status, j.status) }}）</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="shrink-0">应用</button>
+                {% if context_job %}
+                <span class="text-sm text-zinc-600">本岗 HC：<strong>{{ context_job.filled_count }}</strong> / {{ context_job.hc }} 已招</span>
+                {% endif %}
+            </form>
+        </div>
+        {% endif %}
         {% if session.get('admin_logged_in') %}
             <nav class="mb-8 rounded-3xl border border-white/30 bg-white/75 p-4 shadow-apple backdrop-blur-xl transition-all duration-500 ease-out">
                 <div class="flex flex-wrap gap-2 items-center">
                     <a class="rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('index') }}">总览看板</a>
                     <a class="rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('scheduler') }}">面试安排</a>
                     <a class="rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('candidates_page') }}">候选人管理</a>
+                    <a class="rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('screening_page') }}">简历筛选</a>
                     <a class="rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('jobs_page') }}">职位发布</a>
                     <a class="rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('report_page') }}">月度报表</a>
                     <a class="rounded-full border border-black/10 bg-white/65 px-4 py-2 text-sm font-medium transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-apple" href="{{ url_for('automation_hub') }}">HR 效率工具</a>

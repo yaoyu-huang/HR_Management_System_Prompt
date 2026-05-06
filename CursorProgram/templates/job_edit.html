@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>编辑职位</h2>
+    <p class="muted" style="margin-top:0">修改后保存即生效；发布渠道与职位描述可随时调整。</p>
+    <form method="post">
+        <div class="grid">
+            <div><label>职位名称</label><br><input type="text" name="title" value="{{ job.title }}" required></div>
+            <div><label>部门</label><br><input type="text" name="department" value="{{ job.department }}" required></div>
+            <div><label>地点</label><br><input type="text" name="location" value="{{ job.location }}" required></div>
+            <div><label>关键词（逗号分隔）</label><br><input type="text" name="keywords" value="{{ job.keywords }}" required></div>
+            <div><label>HC（编制人数）</label><br><input type="number" name="hc" min="1" value="{{ job.hc }}" required></div>
+            <div><label>已招人数</label><br><input type="number" name="filled_count" min="0" value="{{ job.filled_count }}" required></div>
+            <div><label>状态</label><br>
+                <select name="status">
+                    <option value="Open" {% if job.status == 'Open' %}selected{% endif %}>招聘中</option>
+                    <option value="Paused" {% if job.status == 'Paused' %}selected{% endif %}>暂停</option>
+                    <option value="Filled" {% if job.status == 'Filled' %}selected{% endif %}>已满编</option>
+                    <option value="Closed" {% if job.status == 'Closed' %}selected{% endif %}>关闭</option>
+                </select>
+            </div>
+        </div>
+        <div class="mt-4">
+            <label>发布渠道（可多选）</label>
+            <div class="channel-grid mt-2">
+                {% for ch in job_publish_channel_options %}
+                <label class="channel-option"><input type="checkbox" name="publish_channels" value="{{ ch }}" {% if ch in selected_channels %}checked{% endif %}> {{ ch }}</label>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="mt-4">
+            <label>职位描述</label><br>
+            <textarea name="description" rows="4" required>{{ job.description }}</textarea>
+        </div>
+        <div class="mt-6 flex flex-wrap gap-3">
+            <button type="submit">保存修改</button>
+            <a class="inline-flex items-center rounded-full border border-black/10 bg-white/80 px-4 py-2 text-sm font-medium text-zinc-700 no-underline hover:shadow-apple" href="{{ url_for('jobs_page') }}">返回职位列表</a>
+        </div>
+    </form>
+</div>
+<style>
+.channel-grid { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; }
+.channel-option { font-size: 0.9rem; cursor: pointer; }
+</style>
+{% endblock %}

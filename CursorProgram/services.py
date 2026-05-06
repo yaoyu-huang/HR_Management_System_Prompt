@@ -31,6 +31,13 @@ JOB_PUBLISH_CHANNEL_OPTIONS = ["官网", "BOSS直聘", "牛客", "实习僧"]
 
 VALID_JOB_STATUSES = ["Open", "Paused", "Closed", "Filled"]
 
+JOB_STATUS_LABELS = {
+    "Open": "招聘中",
+    "Paused": "暂停",
+    "Closed": "已关闭",
+    "Filled": "已满编",
+}
+
 
 def normalize_job_publish_channels(selected):
     """按固定顺序保存已勾选的发布渠道。"""
@@ -47,31 +54,57 @@ def normalize_input_datetime(dt_text):
     return parsed.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def list_candidates():
+def list_candidates(job_id=None):
     conn = get_conn()
-    rows = conn.execute(
-        "SELECT id, name, email, role, status, created_at FROM candidates ORDER BY id DESC"
-    ).fetchall()
+    if job_id is not None:
+        rows = conn.execute(
+            """
+            SELECT c.id, c.name, c.email, c.role, c.status, c.created_at, c.job_id,
+                   j.title AS job_title
+            FROM candidates c
+            LEFT JOIN jobs j ON j.id = c.job_id
+            WHERE c.job_id = ?
+            ORDER BY c.id DESC
+            """,
+            (job_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT c.id, c.name, c.email, c.role, c.status, c.created_at, c.job_id,
+                   j.title AS job_title
+            FROM candidates c
+            LEFT JOIN jobs j ON j.id = c.job_id
+            ORDER BY c.id DESC
+            """
+        ).fetchall()
     conn.close()
     return rows
 
 
-def query_candidates(q="", status="", sort="created_desc"):
+def query_candidates(q="", status="", sort="created_desc", job_id=None):
     conn = get_conn()
     where = []
     params = []
     if q:
-        where.append("(name LIKE ? OR email LIKE ? OR role LIKE ?)")
-        params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
+        where.append("(c.name LIKE ? OR c.email LIKE ? OR c.role LIKE ? OR j.title LIKE ?)")
+        params.extend([f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"])
     if status:
-        where.append("status = ?")
+        where.append("c.status = ?")
         params.append(status)
+    if job_id is not None:
+        where.append("c.job_id = ?")
+        params.append(job_id)
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
-    order_sql = SORT_MAP.get(sort, "created_at DESC")
+    order_sql = SORT_MAP.get(sort, "created_at DESC").replace("created_at", "c.created_at").replace(
+        "name", "c.name"
+    )
     rows = conn.execute(
         f"""
-        SELECT id, name, email, role, status, created_at
-        FROM candidates
+        SELECT c.id, c.name, c.email, c.role, c.status, c.created_at, c.job_id,
+               j.title AS job_title
+        FROM candidates c
+        LEFT JOIN jobs j ON j.id = c.job_id
         {where_sql}
         ORDER BY {order_sql}
         """,
@@ -104,7 +137,7 @@ def list_interviews():
     return rows
 
 
-def query_interviews(q="", mode="", sort="created_desc"):
+def query_interviews(q="", mode="", sort="created_desc", job_id=None):
     conn = get_conn()
     where = []
     params = []
@@ -114,6 +147,9 @@ def query_interviews(q="", mode="", sort="created_desc"):
     if mode:
         where.append("i.mode = ?")
         params.append(mode)
+    if job_id is not None:
+        where.append("c.job_id = ?")
+        params.append(job_id)
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
     order_sql = "i.created_at DESC" if sort == "created_desc" else "i.created_at ASC"
     rows = conn.execute(
@@ -148,7 +184,7 @@ def list_notifications(limit=50):
     return rows
 
 
-def query_notifications(q="", type_filter="", sort="created_desc"):
+def query_notifications(q="", type_filter="", sort="created_desc", job_id=None):
     conn = get_conn()
     where = []
     params = []
@@ -158,6 +194,9 @@ def query_notifications(q="", type_filter="", sort="created_desc"):
     if type_filter:
         where.append("n.type = ?")
         params.append(type_filter)
+    if job_id is not None:
+        where.append("c.job_id = ?")
+        params.append(job_id)
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
     order_sql = "n.sent_at DESC" if sort == "created_desc" else "n.sent_at ASC"
     rows = conn.execute(
@@ -268,6 +307,40 @@ def update_candidate_status(candidate_id, new_status):
     conn.close()
 
 
+def update_candidate_job_and_role(candidate_id, job_id, role):
+    role = (role or "").strip()
+    if not role:
+        raise ValueError("应聘说明不能为空")
+    if not job_id:
+        raise ValueError("请选择系统职位")
+
+    conn = get_conn()
+    cand = conn.execute("SELECT id, email FROM candidates WHERE id = ?", (candidate_id,)).fetchone()
+    if not cand:
+        conn.close()
+        raise ValueError("候选人不存在")
+
+    job = conn.execute("SELECT 1 FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if not job:
+        conn.close()
+        raise ValueError("职位不存在")
+
+    dup = conn.execute(
+        "SELECT 1 FROM candidates WHERE email = ? AND job_id = ? AND id != ?",
+        (cand["email"], job_id, candidate_id),
+    ).fetchone()
+    if dup:
+        conn.close()
+        raise ValueError("该邮箱在此系统职位下已有其他候选人记录")
+
+    conn.execute(
+        "UPDATE candidates SET job_id = ?, role = ? WHERE id = ?",
+        (job_id, role, candidate_id),
+    )
+    conn.commit()
+    conn.close()
+
+
 def generate_monthly_report(month_str):
     start = datetime.fromisoformat(month_str + "-01")
     if start.month == 12:
@@ -337,8 +410,16 @@ def generate_monthly_report(month_str):
     }
 
 
-def import_candidates_from_rows(rows):
+def import_candidates_from_rows(rows, job_id):
+    if not job_id:
+        raise ValueError("请选择候选人归属职位")
+
     conn = get_conn()
+    exists_job = conn.execute("SELECT 1 FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if not exists_job:
+        conn.close()
+        raise ValueError("归属职位不存在")
+
     inserted = 0
     skipped = 0
     now = now_text()
@@ -358,26 +439,40 @@ def import_candidates_from_rows(rows):
             status = "Applied"
 
         exists = conn.execute(
-            "SELECT 1 FROM candidates WHERE email = ? AND role = ?",
-            (email, role),
+            "SELECT 1 FROM candidates WHERE email = ? AND job_id = ?",
+            (email, job_id),
         ).fetchone()
         if exists:
             skipped += 1
-            errors.append({"line": idx, "reason": "候选人（email+role）已存在"})
+            errors.append({"line": idx, "reason": "该职位下候选人邮箱已存在"})
             continue
 
         conn.execute(
             """
-            INSERT INTO candidates (name, email, role, status, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO candidates (name, email, role, status, created_at, job_id)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (name, email, role, status, now),
+            (name, email, role, status, now, job_id),
         )
         inserted += 1
 
     conn.commit()
     conn.close()
     return {"inserted": inserted, "skipped": skipped, "errors": errors}
+
+
+def get_job(job_id):
+    conn = get_conn()
+    row = conn.execute(
+        """
+        SELECT id, title, department, location, keywords, description, status, created_at,
+               publish_channels, hc, filled_count
+        FROM jobs WHERE id = ?
+        """,
+        (job_id,),
+    ).fetchone()
+    conn.close()
+    return row
 
 
 def list_jobs():
@@ -392,6 +487,43 @@ def list_jobs():
     ).fetchall()
     conn.close()
     return rows
+
+
+def list_job_pipeline_overviews():
+    """各职位 HC、在招状态及候选人阶段分布。"""
+    conn = get_conn()
+    jobs = conn.execute(
+        """
+        SELECT id, title, department, status, hc, filled_count
+        FROM jobs
+        ORDER BY created_at DESC
+        """
+    ).fetchall()
+    out = []
+    for job in jobs:
+        counts = {s: 0 for s in VALID_STATUSES}
+        agg = conn.execute(
+            """
+            SELECT status, COUNT(*) AS c
+            FROM candidates
+            WHERE job_id = ?
+            GROUP BY status
+            """,
+            (job["id"],),
+        ).fetchall()
+        for r in agg:
+            if r["status"] in counts:
+                counts[r["status"]] = r["c"]
+        total = sum(counts.values())
+        out.append(
+            {
+                "job": job,
+                "status_counts": counts,
+                "candidate_total": total,
+            }
+        )
+    conn.close()
+    return out
 
 
 def query_jobs(q="", status="", sort="created_desc"):
@@ -483,6 +615,71 @@ def update_job_recruitment(job_id, hc, filled_count, status):
     conn.close()
 
 
+def update_job_full(
+    job_id,
+    title,
+    department,
+    location,
+    keywords,
+    description,
+    status,
+    publish_channels,
+    hc,
+    filled_count,
+):
+    if status not in VALID_JOB_STATUSES:
+        raise ValueError("职位状态不合法")
+    if hc < 1:
+        raise ValueError("HC 至少为 1")
+    if filled_count < 0:
+        raise ValueError("已招人数不能为负")
+    if filled_count > hc:
+        raise ValueError("已招人数不能大于 HC")
+
+    conn = get_conn()
+    exists = conn.execute("SELECT 1 FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if not exists:
+        conn.close()
+        raise ValueError("职位不存在")
+
+    conn.execute(
+        """
+        UPDATE jobs SET
+            title = ?, department = ?, location = ?, keywords = ?, description = ?,
+            status = ?, publish_channels = ?, hc = ?, filled_count = ?
+        WHERE id = ?
+        """,
+        (
+            title,
+            department,
+            location,
+            keywords,
+            description,
+            status,
+            publish_channels,
+            hc,
+            filled_count,
+            job_id,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_job(job_id):
+    conn = get_conn()
+    exists = conn.execute("SELECT 1 FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if not exists:
+        conn.close()
+        raise ValueError("职位不存在")
+
+    conn.execute("DELETE FROM resume_screenings WHERE job_id = ?", (job_id,))
+    conn.execute("UPDATE candidates SET job_id = NULL WHERE job_id = ?", (job_id,))
+    conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+    conn.commit()
+    conn.close()
+
+
 def run_resume_screening(candidate_name, candidate_email, job_id, resume_text):
     conn = get_conn()
     job = conn.execute(
@@ -521,7 +718,7 @@ def run_resume_screening(candidate_name, candidate_email, job_id, resume_text):
     return {"score": score, "result": result, "matched_keywords": matched, "job_title": job["title"]}
 
 
-def query_resume_screenings(q="", result_filter="", sort="created_desc"):
+def query_resume_screenings(q="", result_filter="", sort="created_desc", job_id=None):
     conn = get_conn()
     where = []
     params = []
@@ -531,6 +728,9 @@ def query_resume_screenings(q="", result_filter="", sort="created_desc"):
     if result_filter:
         where.append("r.result = ?")
         params.append(result_filter)
+    if job_id is not None:
+        where.append("r.job_id = ?")
+        params.append(job_id)
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
     order_sql = "r.created_at DESC" if sort == "created_desc" else "r.created_at ASC"
     rows = conn.execute(

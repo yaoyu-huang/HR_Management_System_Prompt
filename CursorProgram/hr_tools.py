@@ -220,6 +220,8 @@ def deepseek_chat_completion(
     base_url: str | None = None,
     timeout_sec: int = 120,
     max_attempts: int = 4,
+    max_tokens: int | None = None,
+    temperature: float | None = None,
 ) -> str:
     """
     调用 DeepSeek Chat API，带退避重试。
@@ -232,11 +234,13 @@ def deepseek_chat_completion(
     base = (base_url or os.environ.get("DEEPSEEK_BASE_URL") or DEEPSEEK_DEFAULT_BASE).strip().rstrip("/")
     url = f"{base}/chat/completions"
 
-    body = {
+    body: dict[str, Any] = {
         "model": m,
         "messages": messages,
-        "temperature": 0.7,
+        "temperature": 0.7 if temperature is None else float(temperature),
     }
+    if max_tokens is not None:
+        body["max_tokens"] = int(max_tokens)
     payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
     headers = {
         "Content-Type": "application/json; charset=utf-8",
@@ -281,15 +285,15 @@ def deepseek_chat_completion(
 # 候选人触达（DeepSeek）
 # ---------------------------------------------------------------------------
 
-TOUCH_SYSTEM_PROMPT = """你是一位资深雇主品牌与员工体验顾问，擅长撰写有温度、有尊重的候选人沟通邮件。
+TOUCH_SYSTEM_PROMPT = """你是雇主品牌顾问，撰写简洁、有尊重的候选人结果通知邮件。
 
 硬性要求：
-1. 这是一封「结果通知」邮件，候选人结果是淘汰，但全文不得出现「能力不行」「沟通差」「不合群」「不行」等冷淡、评判人格的措辞。
-2. 将「沟通偏内敛、表达较少」转化为积极表述：例如强调对方「特质更适合需要深度专注与独立推进的技术攻坚场景」，或「在结构化书面沟通中更能充分展现优势」——避免暗示对方「不适合团队」。
-3. 将「期望薪资超出部门预算」转化为：例如「当前部门编制与薪酬带宽暂时难以完全匹配您现阶段的市场估值」或「公司现阶段架构能提供的成长阶梯与该期望之间存在落差」，不贬低候选人要价。
-4. 给出 1～2 条真诚、可执行的职业发展建议（如技术沉淀方向、作品集呈现、面试表达结构等），避免空话。
-5. 语气专业、克制、温暖；字数约 800～1200 字中文；使用「您」；邮件需有标题行、称呼、正文分段、祝颂语与落款（虚构公司名称「启明数科」即可）。
-6. 不要编造候选人未提供的具体技术栈细节；可泛化建议。"""
+1. 淘汰类结果：禁用「能力不行」「沟通差」「不行」等评判人格措辞。
+2. 内敛/话少 → 转写为「更适合深度专注/结构化书面表达」等中性积极表述；不提「不适合团队」。
+3. 薪资不匹配 → 用「编制与薪酬带宽暂难匹配当前期望」等表述，不贬低要价。
+4. 仅 1 条可执行建议（面试表达、作品集或技能沉淀之一），一句话说清，忌空话。
+5. 全文约 320～480 字中文；用「您」；结构：主题行 + 称呼 + 2～3 段短正文 + 简短祝颂 + 落款「启明数科 招聘团队」。
+6. 不编造候选人未提及的具体技术栈。"""
 
 
 def generate_touch_letter(
@@ -307,7 +311,7 @@ def generate_touch_letter(
         f"应聘岗位：{role}\n"
         f"HR 内部面评（仅供你转化语气，请勿原文照抄到邮件）：{hr_feedback}\n"
         f"招聘结果：{decision}\n\n"
-        "请直接输出完整邮件正文（含邮件主题一行，格式为「主题：……」作为首行）。"
+        "请直接输出完整邮件（首行「主题：……」），语气真诚但避免重复客套与冗长铺垫。"
     )
     messages = [
         {"role": "system", "content": TOUCH_SYSTEM_PROMPT},
@@ -318,6 +322,8 @@ def generate_touch_letter(
         messages,
         model=model_name,
         max_attempts=max_attempts,
+        max_tokens=900,
+        temperature=0.55,
     )
 
 

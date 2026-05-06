@@ -10,7 +10,7 @@
                 <label>应聘职位</label><br>
                 <select name="job_id" required>
                     {% for j in jobs %}
-                    <option value="{{ j.id }}">{{ j.title }} - {{ j.department }}</option>
+                    <option value="{{ j.id }}" {% if preselect_job_id and preselect_job_id == j.id %}selected{% endif %}>{{ j.title }} - {{ j.department }}</option>
                     {% endfor %}
                 </select>
             </div>

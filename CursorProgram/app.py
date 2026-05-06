@@ -22,6 +22,8 @@ from services import (
     list_candidates,
     list_interviewers,
     list_jobs,
+    get_job,
+    list_job_pipeline_overviews,
     query_candidates,
     query_interviews,
     query_jobs,
@@ -29,15 +31,21 @@ from services import (
     import_candidates_from_rows,
     create_job,
     JOB_PUBLISH_CHANNEL_OPTIONS,
+    JOB_STATUS_LABELS,
     normalize_job_publish_channels,
     update_job_recruitment,
+    update_job_full,
+    delete_job,
     get_admin_user,
     update_admin_login_success,
     update_admin_login_failed,
     reset_admin_failed_attempts,
     update_admin_password,
     update_candidate_status,
+    update_candidate_job_and_role,
     schedule_interview,
+    run_resume_screening,
+    query_resume_screenings,
 )
 from hr_tools import (
     DEFAULT_INTERVIEW_AVAILABILITY_JSON,
@@ -79,7 +87,38 @@ def inject_common():
         except ValueError:
             return value
 
-    return {"status_text": status_text, "status_labels": STATUS_LABELS, "format_time": format_time}
+    ctx = {}
+    if session.get("admin_logged_in"):
+        ctx["nav_jobs_list"] = list_jobs()
+        raw = session.get("context_job_id")
+        cid = None
+        if raw not in (None, "", "all"):
+            try:
+                cid = int(raw)
+            except (TypeError, ValueError):
+                cid = None
+        job_row = get_job(cid) if cid else None
+        if cid and not job_row:
+            session.pop("context_job_id", None)
+            cid = None
+        ctx["context_job_id"] = cid if job_row else None
+        ctx["context_job"] = job_row
+        ctx["job_status_labels"] = JOB_STATUS_LABELS
+
+    base = {"status_text": status_text, "status_labels": STATUS_LABELS, "format_time": format_time}
+    base.update(ctx)
+    return base
+
+
+def resolve_context_job_id():
+    raw = session.get("context_job_id")
+    if raw in (None, "", "all"):
+        return None
+    try:
+        jid = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return jid if get_job(jid) else None
 
 
 def parse_int(value, default):
@@ -161,19 +200,44 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.route("/context/job", methods=["POST"])
+@login_required
+def set_context_job():
+    raw = (request.form.get("job_id") or "").strip()
+    if raw in ("", "all"):
+        session.pop("context_job_id", None)
+        flash("已切换为「全部岗位」视图。", "success")
+    else:
+        try:
+            jid = int(raw)
+        except ValueError:
+            flash("岗位选择无效。", "error")
+            return redirect(request.referrer or url_for("index"))
+        if not get_job(jid):
+            flash("所选职位不存在。", "error")
+            return redirect(request.referrer or url_for("index"))
+        session["context_job_id"] = jid
+        flash("当前系统已按所选岗位过滤。", "success")
+    return redirect(request.form.get("next") or request.referrer or url_for("index"))
+
+
 @app.route("/")
 @login_required
 def index():
-    candidates = list_candidates()
-    interviews = query_interviews()[:8]
-    notifications = query_notifications()[:10]
+    ctx_job = resolve_context_job_id()
+    candidates = list_candidates(job_id=ctx_job)
+    interviews = query_interviews(job_id=ctx_job)[:8]
+    notifications = query_notifications(job_id=ctx_job)[:10]
     jobs = list_jobs()
+    job_pipelines = list_job_pipeline_overviews()
     return render_template(
         "index.html",
         candidates=candidates,
         interviews=interviews,
         notifications=notifications,
         jobs=jobs,
+        job_pipelines=job_pipelines,
+        context_job_id=ctx_job,
     )
 
 
@@ -201,14 +265,15 @@ def scheduler():
             flash(f"安排面试失败：{exc}", "error")
             return redirect(url_for("scheduler"))
 
-    candidates = list_candidates()
+    ctx_job = resolve_context_job_id()
+    candidates = list_candidates(job_id=ctx_job)
     interviewers = list_interviewers()
     q = request.args.get("q", "").strip()
     mode = request.args.get("mode", "").strip()
     sort = request.args.get("sort", "created_desc").strip()
     page = parse_int(request.args.get("page"), 1)
     page_size = parse_int(request.args.get("page_size"), 10)
-    interviews = query_interviews(q=q, mode=mode, sort=sort)
+    interviews = query_interviews(q=q, mode=mode, sort=sort, job_id=ctx_job)
     paging = paginate_rows(interviews, page, page_size)
     return render_template(
         "scheduler.html",
@@ -246,8 +311,9 @@ def candidates_page():
     npage = parse_int(request.args.get("npage"), 1)
     npage_size = parse_int(request.args.get("npage_size"), 10)
 
-    candidates_all = query_candidates(q=q, status=status_filter, sort=sort)
-    notifications_all = query_notifications(q=nq, type_filter=ntype, sort=nsort)
+    ctx_job = resolve_context_job_id()
+    candidates_all = query_candidates(q=q, status=status_filter, sort=sort, job_id=ctx_job)
+    notifications_all = query_notifications(q=nq, type_filter=ntype, sort=nsort, job_id=ctx_job)
     paging = paginate_rows(candidates_all, page, page_size)
     notif_paging = paginate_rows(notifications_all, npage, npage_size)
     return render_template(
@@ -259,6 +325,35 @@ def candidates_page():
         notif_paging=notif_paging,
         filters={"q": q, "status": status_filter, "sort": sort, "page_size": page_size},
         notif_filters={"nq": nq, "ntype": ntype, "nsort": nsort, "npage_size": npage_size},
+    )
+
+
+@app.route("/candidates/<int:candidate_id>/job-role", methods=["POST"])
+@login_required
+def candidate_update_job_role(candidate_id):
+    try:
+        update_candidate_job_and_role(
+            candidate_id,
+            parse_int(request.form.get("job_id"), 0),
+            request.form.get("role", "").strip(),
+        )
+        flash("系统职位与应聘说明已更新。", "success")
+    except Exception as exc:
+        flash(f"更新失败：{exc}", "error")
+    return redirect(
+        url_for(
+            "candidates_page",
+            q=request.args.get("q", ""),
+            status=request.args.get("status", ""),
+            sort=request.args.get("sort", "created_desc"),
+            page_size=parse_int(request.args.get("page_size"), 10),
+            page=parse_int(request.args.get("page"), 1),
+            nq=request.args.get("nq", ""),
+            ntype=request.args.get("ntype", ""),
+            nsort=request.args.get("nsort", "created_desc"),
+            npage_size=parse_int(request.args.get("npage_size"), 10),
+            npage=parse_int(request.args.get("npage"), 1),
+        )
     )
 
 
@@ -278,7 +373,11 @@ def import_candidates():
             flash("CSV 列头必须包含：name,email,role（status 可选）。", "error")
             return redirect(url_for("candidates_page"))
 
-        result = import_candidates_from_rows(list(reader))
+        import_job_id = parse_int(request.form.get("import_job_id"), 0)
+        if not import_job_id:
+            flash("导入前请在表单中选择候选人归属职位。", "error")
+            return redirect(url_for("candidates_page"))
+        result = import_candidates_from_rows(list(reader), job_id=import_job_id)
         flash(
             f"导入完成：新增 {result['inserted']} 条，跳过 {result['skipped']} 条。",
             "success",
@@ -387,6 +486,73 @@ def job_update_row(job_id):
             page=parse_int(request.args.get("page"), 1),
         )
     )
+
+
+def _redirect_jobs_list():
+    return redirect(
+        url_for(
+            "jobs_page",
+            q=request.args.get("q", ""),
+            status=request.args.get("status", ""),
+            sort=request.args.get("sort", "created_desc"),
+            page_size=parse_int(request.args.get("page_size"), 10),
+            page=parse_int(request.args.get("page"), 1),
+        )
+    )
+
+
+@app.route("/jobs/<int:job_id>/edit", methods=["GET", "POST"])
+@login_required
+def job_edit_page(job_id):
+    job = get_job(job_id)
+    if not job:
+        flash("职位不存在或已删除。", "error")
+        return redirect(url_for("jobs_page"))
+
+    if request.method == "POST":
+        try:
+            channels = normalize_job_publish_channels(request.form.getlist("publish_channels"))
+            update_job_full(
+                job_id,
+                title=request.form.get("title", "").strip(),
+                department=request.form.get("department", "").strip(),
+                location=request.form.get("location", "").strip(),
+                keywords=request.form.get("keywords", "").strip(),
+                description=request.form.get("description", "").strip(),
+                status=request.form.get("status", "Open").strip(),
+                publish_channels=channels,
+                hc=parse_int(request.form.get("hc"), 1),
+                filled_count=parse_int(request.form.get("filled_count"), 0),
+            )
+            flash("职位信息已保存。", "success")
+            return _redirect_jobs_list()
+        except Exception as exc:
+            flash(f"保存失败：{exc}", "error")
+
+    selected_channels = set((job["publish_channels"] or "").split(",")) if job["publish_channels"] else set()
+    return render_template(
+        "job_edit.html",
+        job=job,
+        job_publish_channel_options=JOB_PUBLISH_CHANNEL_OPTIONS,
+        selected_channels=selected_channels,
+    )
+
+
+@app.route("/jobs/<int:job_id>/delete", methods=["POST"])
+@login_required
+def job_delete(job_id):
+    try:
+        delete_job(job_id)
+        try:
+            ctx_j = int(session.get("context_job_id"))
+        except (TypeError, ValueError):
+            ctx_j = None
+        if ctx_j == job_id:
+            session.pop("context_job_id", None)
+        flash("职位已删除；归属候选人的职位已解除，该职位的筛选记录已清空。", "success")
+    except Exception as exc:
+        flash(f"删除失败：{exc}", "error")
+    return _redirect_jobs_list()
 
 
 @app.route("/account/password", methods=["GET", "POST"])
@@ -532,6 +698,48 @@ def automation_insight():
         conv_table=conv_table,
         avg_cycle=avg_cycle,
         report=report,
+    )
+
+
+@app.route("/screening", methods=["GET", "POST"])
+@login_required
+def screening_page():
+    ctx_job = resolve_context_job_id()
+    jobs = list_jobs()
+    if request.method == "POST":
+        try:
+            job_id = parse_int(request.form.get("job_id"), 0)
+            if not job_id:
+                job_id = ctx_job
+            if not job_id:
+                flash("请选择应聘职位（可在顶部先选定当前岗位）。", "error")
+                return redirect(url_for("screening_page"))
+            run_resume_screening(
+                request.form.get("candidate_name", "").strip(),
+                request.form.get("candidate_email", "").strip(),
+                job_id,
+                request.form.get("resume_text", "").strip(),
+            )
+            flash("简历筛选已完成并入库。", "success")
+            return redirect(url_for("screening_page"))
+        except Exception as exc:
+            flash(f"筛选失败：{exc}", "error")
+            return redirect(url_for("screening_page"))
+
+    q = request.args.get("q", "").strip()
+    result_filter = request.args.get("result", "").strip()
+    sort = request.args.get("sort", "created_desc").strip()
+    page = parse_int(request.args.get("page"), 1)
+    page_size = parse_int(request.args.get("page_size"), 10)
+    screenings_all = query_resume_screenings(q=q, result_filter=result_filter, sort=sort, job_id=ctx_job)
+    paging = paginate_rows(screenings_all, page, page_size)
+    return render_template(
+        "screening.html",
+        jobs=jobs,
+        screenings=paging["items"],
+        paging=paging,
+        filters={"q": q, "result": result_filter, "sort": sort, "page_size": page_size},
+        preselect_job_id=ctx_job,
     )
 
 

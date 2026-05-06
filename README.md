@@ -81,6 +81,7 @@ name,email,role,status
 CLI 脚本见 `hr_demos/candidate_touch_gemini.py`、`hr_demos/hr_insight_report_gemini.py`（同样读取 `DEEPSEEK_API_KEY`）。
 
 ##报错说明
+
 Error Code: -102
 URL: http://127.0.0.1:5000/
 错误 -102 表示连接被拒绝，通常是 Flask 未在运行。

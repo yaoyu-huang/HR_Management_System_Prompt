@@ -29,7 +29,7 @@
         </div>
         <div class="mt-4">
             <label>职位描述</label><br>
-            <input type="text" name="description" required>
+            <textarea name="description" rows="3" required placeholder="岗位职责与任职要求"></textarea>
         </div>
         <br>
         <button type="submit">发布职位</button>
@@ -71,6 +71,7 @@
                 <th>发布渠道</th>
                 <th>发布时间</th>
                 <th>HC / 已招 / 状态</th>
+                <th>操作</th>
             </tr>
         </thead>
         <tbody>
@@ -98,9 +99,17 @@
                         <button type="submit">保存</button>
                     </form>
                 </td>
+                <td>
+                    <div class="job-actions">
+                        <a class="job-action-link" href="{{ url_for('job_edit_page', job_id=j.id) }}">编辑</a>
+                        <form method="post" class="job-delete-form" action="{{ url_for('job_delete', job_id=j.id, q=filters.q, status=filters.status, sort=filters.sort, page_size=filters.page_size, page=paging.page) }}" onsubmit="return confirm('确定删除该职位？\n\n该职位下的简历筛选记录将被清空；已关联的候选人将解除与此职位的绑定（候选人记录保留）。');">
+                            <button type="submit" class="job-delete-btn">删除</button>
+                        </form>
+                    </div>
+                </td>
             </tr>
             {% else %}
-            <tr><td colspan="7">暂无职位</td></tr>
+            <tr><td colspan="8">暂无职位</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -124,5 +133,11 @@
 .job-inline-form button { font-size: 0.8rem; padding: 0.25rem 0.5rem; white-space: nowrap; }
 .hc-sep { color: var(--muted, #666); font-size: 0.85rem; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+.job-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; }
+.job-action-link { font-size: 0.875rem; font-weight: 600; color: #0071e3; text-decoration: none; }
+.job-action-link:hover { text-decoration: underline; }
+.job-delete-form { display: inline; margin: 0; }
+.job-delete-btn { background: #b91c1c; font-size: 0.8rem; padding: 0.25rem 0.55rem; }
+.job-delete-btn:hover { background: #991b1b; }
 </style>
 {% endblock %}
